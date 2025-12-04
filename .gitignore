@@ -1,0 +1,14 @@
+# IDE
+.vscode/
+.idea/
+
+# System
+.DS_Store
+Thumbs.db
+
+# Agent / Tools
+.gemini/
+.kiro/settings/
+
+# Project specific exclusions that might be in root
+*.log
