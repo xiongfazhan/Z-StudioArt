@@ -4,36 +4,51 @@
 
 它结合了最新的 AIGC 技术（Z-Image-Turbo）与现代化的 Web 交互体验，让用户能够通过简单的文字描述，在几秒钟内生成专业级的营销素材。
 
-![Status](https://img.shields.io/badge/Status-Beta-blue) ![License](https://img.shields.io/badge/License-MIT-green)
+![Status](https://img.shields.io/badge/Status-MVP%20Ready-brightgreen) ![License](https://img.shields.io/badge/License-MIT-blue) ![React](https://img.shields.io/badge/Frontend-React%2019-61dafb) ![FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688)
+
+---
+
+## 🚧 项目状态 (Project Status)
+
+本项目目前处于 **High-Fidelity MVP (高保真最小可行性产品)** 阶段。
+
+*   ✅ **核心功能已就绪**：智能海报生成、场景融合、模板系统、S3 图片存储等核心业务逻辑已完整实现并经过测试。
+*   ✅ **前端高保真**：基于 React 19 的现代化 UI，包含完整的认证、支付演示、历史记录和创作工作台。
+*   ⚠️ **演示模式数据存储**：为了便于快速部署和演示，目前的 `AuthService` (用户认证) 和 `PaymentService` (支付订单) 默认配置为 **内存存储 (In-Memory Storage)** 模式。这意味着**重启后端服务后，注册用户、订单记录和生成历史将会重置**。
+    *   *下一步计划：集成 PostgreSQL 数据库以实现持久化存储。*
 
 ---
 
 ## ✨ 核心功能 (Key Features)
 
+> 详细功能清单请参阅 [FEATURES.md](./FEATURES.md)
+
 *   **🎨 智能海报生成 (AI Poster Generation)**: 输入场景描述和营销文案，AI 自动生成图文并茂的商业海报。
 *   **🛍️ 场景融合 (Scene Fusion)**: 上传白底商品图，AI 自动将其融合进指定的背景场景中（虚拟摄影棚）。
-*   **📐 灵活尺寸支持 (Multi-Dimension)**: 支持主流社交媒体尺寸 (1:1, 9:16, 16:9) 及**自定义宽高** (Custom Size)。
+*   **📐 灵活尺寸支持 (Multi-Dimension)**: 支持主流社交媒体尺寸 (1:1, 9:16, 16:9) 及智能构图。
 *   **📝 智能模版 (Smart Templates)**: 内置多种营销模版（促销、节日、高级感），一键套用风格。
 *   **🌍 双语支持 (Internationalization)**: 完美支持中文与英文界面切换，适应全球化创作需求。
 *   **💎 现代 UI 设计 (Glassmorphism)**: 采用深色毛玻璃风格设计，提供沉浸式的创作体验。
 
+---
+
 ## 🛠 技术栈 (Tech Stack)
 
 ### Frontend (前端)
-*   **Framework**: React 18 + Vite
+*   **Framework**: React 19 + Vite
 *   **Language**: TypeScript
 *   **Styling**: Tailwind CSS (Glassmorphism Design System)
-*   **HTTP Client**: Axios
-*   **State**: React Hooks
+*   **State Management**: Zustand (with Persistence)
+*   **Network**: Axios (Auto Token Refresh)
+*   **Testing**: Vitest
 
 ### Backend (后端)
-*   **Framework**: FastAPI (Python)
-*   **AI Model**: ModelScope Z-Image-Turbo (via API)
-*   **Database**: PostgreSQL + SQLAlchemy
-*   **Cache**: Redis
-*   **Image Processing**: Pillow (PIL) for watermarking & resizing
+*   **Framework**: FastAPI (Python 3.10+)
+*   **AI Model**: ModelScope Z-Image-Turbo (via Async API)
+*   **Storage**: AWS S3 Compatible Object Storage (MinIO/OSS/S3)
+*   **Image Processing**: Pillow (PIL) + NumPy (Product Extraction)
 *   **Testing**: Pytest + Hypothesis (Property-Based Testing)
-*   **Concurrency**: Python Asyncio
+*   **Architecture**: Service-Oriented Architecture (SOA)
 
 ---
 
@@ -57,11 +72,12 @@ python -m venv venv
 source venv/bin/activate  # Windows: venv\Scripts\activate
 
 # 安装依赖
-pip install -r requirements.txt  # 如果没有 requirements.txt，请手动安装: fastapi uvicorn httpx pillow python-dotenv pydantic
+pip install -r requirements.txt
 
 # 配置环境变量
 cp .env.example .env
 # 编辑 .env 文件，填入你的 ModelScope API Key
+# 提示：如果没有 S3 配置，系统会自动回退到 Base64 模式，无需额外配置即可运行演示。
 ```
 
 **启动后端服务：**
@@ -79,9 +95,6 @@ cd frontend
 # 安装依赖
 npm install
 
-# 配置环境变量 (可选，默认为 localhost:8000)
-cp .env.example .env
-
 # 启动开发服务器
 npm run dev
 ```
@@ -90,25 +103,30 @@ npm run dev
 
 ---
 
+## 🗺️ 路线图 (Roadmap)
+
+- [x] **MVP Phase 1**: 核心 AI 生成功能、前端 UI、内存级用户系统。
+- [ ] **MVP Phase 2 (Current Focus)**: 
+    - [ ] 集成 PostgreSQL 数据库，替换内存存储。
+    - [ ] 完善 Alembic 数据库迁移脚本。
+    - [ ] 对接真实支付网关回调。
+- [ ] **Beta**: 用户自定义模板上传、社区分享功能。
+
+---
+
 ## ⚙️ 环境变量配置
 
 ### Backend (`backend/.env`)
 | 变量名 | 描述 | 默认值/示例 |
-|or|---|---|
+|---|---|---|
 | `MODELSCOPE_API_KEY` | **[必需]** 阿里 ModelScope API 密钥 | `ms-...` |
-| `MODELSCOPE_BASE_URL`| ModelScope API 地址 | `https://api-inference.modelscope.cn/` |
-| `ZIMAGE_TIMEOUT` | 生成超时时间 (ms) | `30000` |
+| `S3_ENDPOINT` | (可选) S3 存储地址 | `https://oss-cn-hangzhou.aliyuncs.com` |
+| `S3_ACCESS_KEY` | (可选) S3 Access Key | `LTAI...` |
 
 ### Frontend (`frontend/.env`)
 | 变量名 | 描述 | 默认值 |
 |---|---|---|
 | `VITE_API_BASE_URL` | 后端 API 地址 | `http://localhost:8000` |
-
----
-
-## 🖼️ 预览截图
-
-*(此处可以添加项目的实际截图)*
 
 ---
 
@@ -121,38 +139,6 @@ npm run dev
 3.  提交更改 (`git commit -m 'Add some AmazingFeature'`)
 4.  推送到分支 (`git push origin feature/AmazingFeature`)
 5.  提交 Pull Request
-
-## � D可ocker 部署
-
-使用 Docker Compose 快速部署：
-
-```bash
-# 配置环境变量
-cp backend/.env.example backend/.env
-# 编辑 backend/.env 填入必要配置
-
-# 启动所有服务
-docker-compose up -d
-
-# 查看日志
-docker-compose logs -f
-```
-
-详细部署指南请参考 [DEPLOYMENT.md](./DEPLOYMENT.md)。
-
-## 🧪 运行测试
-
-### 后端测试
-```bash
-cd backend
-pytest tests/ -v
-```
-
-### 前端测试
-```bash
-cd frontend
-npm test
-```
 
 ## 📄 许可证 (License)
 
