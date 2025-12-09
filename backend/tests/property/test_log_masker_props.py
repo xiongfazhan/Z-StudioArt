@@ -42,12 +42,17 @@ email_local_part = st.text(
     max_size=30,
 )
 
-# Strategy for generating valid email domains
-email_domain = st.text(
-    alphabet="abcdefghijklmnopqrstuvwxyz0123456789.-",
-    min_size=3,
-    max_size=30,
-).filter(lambda x: "." in x and not x.startswith(".") and not x.endswith("."))
+# Strategy for generating valid email domains (e.g., "example.com")
+# Use composite strategy to ensure domain always has a dot
+email_domain = st.builds(
+    lambda name, tld: f"{name}.{tld}",
+    name=st.text(
+        alphabet="abcdefghijklmnopqrstuvwxyz0123456789",
+        min_size=1,
+        max_size=15,
+    ),
+    tld=st.sampled_from(["com", "org", "net", "io", "co", "cn", "edu", "gov"]),
+)
 
 # Strategy for generating valid user IDs (length > 6)
 valid_user_id_strategy = st.text(

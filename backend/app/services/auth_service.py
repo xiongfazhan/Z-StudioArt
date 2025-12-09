@@ -46,6 +46,8 @@ from app.utils.jwt import (
     InvalidTokenError,
     get_jwt_service,
 )
+from app.utils.log_masker import LogMasker
+from app.utils.validators import InputValidator
 
 
 logger = logging.getLogger(__name__)
@@ -102,6 +104,11 @@ class TokenRevokedError(AuthError):
 
 class WeakPasswordError(AuthError):
     """Raised when password does not meet requirements."""
+    pass
+
+
+class InputTooLongError(AuthError):
+    """Raised when input exceeds maximum length limit."""
     pass
 
 
@@ -180,37 +187,107 @@ class AuthService:
     # ========================================================================
     
     def validate_phone(self, phone: str) -> bool:
-        """Validate phone number format.
+        """Validate phone number format and length.
         
         Args:
             phone: Phone number to validate
             
         Returns:
             True if valid, False otherwise
+            
+        Requirements:
+            - 3.1: WHEN 用户提交手机号时 THEN PopGraph SHALL 验证长度不超过 20 个字符
         """
+        # Check length first (Requirements: 3.1)
+        if not InputValidator.validate_phone_length(phone):
+            return False
         return bool(self.PHONE_PATTERN.match(phone))
     
     def validate_email(self, email: str) -> bool:
-        """Validate email format.
+        """Validate email format and length.
         
         Args:
             email: Email to validate
             
         Returns:
             True if valid, False otherwise
+            
+        Requirements:
+            - 3.2: WHEN 用户提交邮箱时 THEN PopGraph SHALL 验证长度不超过 255 个字符
         """
+        # Check length first (Requirements: 3.2)
+        if not InputValidator.validate_email_length(email):
+            return False
         return bool(self.EMAIL_PATTERN.match(email))
     
     def validate_password(self, password: str) -> bool:
-        """Validate password meets requirements.
+        """Validate password meets requirements including length limits.
         
         Args:
             password: Password to validate
             
         Returns:
             True if valid, False otherwise
+            
+        Requirements:
+            - 3.3: WHEN 用户提交密码时 THEN PopGraph SHALL 验证长度不超过 128 个字符
         """
+        # Check max length first (Requirements: 3.3)
+        if not InputValidator.validate_password_length(password):
+            return False
         return len(password) >= self.MIN_PASSWORD_LENGTH
+    
+    def _validate_phone_or_raise(self, phone: str) -> None:
+        """Validate phone number format and length, raise exception if invalid.
+        
+        提取重复的手机号验证逻辑，统一用于 register_with_phone、
+        login_with_phone、send_verification_code 方法。
+        
+        Args:
+            phone: Phone number to validate
+            
+        Raises:
+            InputTooLongError: If phone exceeds maximum length
+            InvalidPhoneFormatError: If phone format is invalid
+            
+        Requirements:
+            - 3.1: WHEN 用户提交手机号时 THEN PopGraph SHALL 验证长度不超过 20 个字符
+            - 6.4: WHEN 验证手机号或邮箱格式时 THEN PopGraph SHALL 使用统一的
+                   _validate_phone_or_raise() 和 _validate_email_or_raise() 方法
+        """
+        # Check length first (Requirements: 3.1)
+        if not InputValidator.validate_phone_length(phone):
+            raise InputTooLongError(
+                f"Phone number exceeds maximum length of {InputValidator.LIMITS.MAX_PHONE_LENGTH} characters"
+            )
+        if not self.validate_phone(phone):
+            raise InvalidPhoneFormatError(f"Invalid phone format: {phone}")
+    
+    def _validate_email_or_raise(self, email: str) -> None:
+        """Validate email format and length, raise exception if invalid.
+        
+        提取重复的邮箱验证逻辑，统一用于 register_with_email、
+        login_with_email 方法。
+        
+        Args:
+            email: Email to validate
+            
+        Raises:
+            InputTooLongError: If email exceeds maximum length
+            InvalidEmailFormatError: If email format is invalid
+            
+        Requirements:
+            - 3.2: WHEN 用户提交邮箱时 THEN PopGraph SHALL 验证长度不超过 255 个字符
+            - 6.4: WHEN 验证手机号或邮箱格式时 THEN PopGraph SHALL 使用统一的
+                   _validate_phone_or_raise() 和 _validate_email_or_raise() 方法
+        """
+        # Check length first (Requirements: 3.2)
+        if not InputValidator.validate_email_length(email):
+            raise InputTooLongError(
+                f"Email address exceeds maximum length of {InputValidator.LIMITS.MAX_EMAIL_LENGTH} characters"
+            )
+        if not self.validate_email(email):
+            raise InvalidEmailFormatError(f"Invalid email format: {email}")
     
     def is_phone_registered(self, phone: str) -> bool:
         """Check if phone number is already registered.
@@ -316,7 +393,10 @@ class AuthService:
         if email:
             self._users_by_email[email.lower()] = user.id
         
-        logger.info(f"Created new user: id={user.id}, phone={phone}, email={email}")
+        # 使用 LogMasker 脱敏敏感信息 (Requirements: 2.4)
+        masked_phone = LogMasker.mask_phone(phone) if phone else None
+        masked_email = LogMasker.mask_email(email) if email else None
+        logger.info(f"Created new user: id={user.id}, phone={masked_phone}, email={masked_email}")
         return user
     
     # ========================================================================
@@ -420,8 +500,7 @@ class AuthService:
         Raises:
             InvalidPhoneFormatError: If phone format is invalid
         """
-        if not self.validate_phone(phone):
-            raise InvalidPhoneFormatError(f"Invalid phone format: {phone}")
+        self._validate_phone_or_raise(phone)
         
         result = await self._sms_service.send_code(phone)
         return result.success
@@ -451,8 +530,7 @@ class AuthService:
             - 1.5: Assign FREE membership tier
         """
         # Validate phone format
-        if not self.validate_phone(phone):
-            raise InvalidPhoneFormatError(f"Invalid phone format: {phone}")
+        self._validate_phone_or_raise(phone)
         
         # Check if phone already registered
         if self.is_phone_registered(phone):
@@ -469,7 +547,8 @@ class AuthService:
         # Create tokens
         tokens = self._create_and_store_tokens(user.id)
         
-        logger.info(f"User registered with phone: {phone}")
+        # 使用 LogMasker 脱敏手机号 (Requirements: 2.4)
+        logger.info(f"User registered with phone: {LogMasker.mask_phone(phone)}")
         return AuthResult(user=user, tokens=tokens)
     
     async def register_with_email(
@@ -496,14 +575,19 @@ class AuthService:
             - 1.5: Assign FREE membership tier
         """
         # Validate email format
-        if not self.validate_email(email):
-            raise InvalidEmailFormatError(f"Invalid email format: {email}")
+        self._validate_email_or_raise(email)
         
         # Check if email already registered
         if self.is_email_registered(email):
             raise EmailAlreadyExistsError(f"Email already registered: {email}")
         
-        # Validate password
+        # Validate password length (Requirements: 3.3)
+        if not InputValidator.validate_password_length(password):
+            raise InputTooLongError(
+                f"Password exceeds maximum length of {InputValidator.LIMITS.MAX_PASSWORD_LENGTH} characters"
+            )
+        
+        # Validate password minimum length
         if not self.validate_password(password):
             raise WeakPasswordError(
                 f"Password must be at least {self.MIN_PASSWORD_LENGTH} characters"
@@ -518,7 +602,8 @@ class AuthService:
         # Create tokens
         tokens = self._create_and_store_tokens(user.id)
         
-        logger.info(f"User registered with email: {email}")
+        # 使用 LogMasker 脱敏邮箱 (Requirements: 2.4)
+        logger.info(f"User registered with email: {LogMasker.mask_email(email)}")
         return AuthResult(user=user, tokens=tokens)
     
     # ========================================================================
@@ -548,8 +633,7 @@ class AuthService:
             - 2.1: Return valid tokens on successful login
         """
         # Validate phone format
-        if not self.validate_phone(phone):
-            raise InvalidPhoneFormatError(f"Invalid phone format: {phone}")
+        self._validate_phone_or_raise(phone)
         
         # Find user
         user_id = self._users_by_phone.get(phone)
@@ -566,7 +650,8 @@ class AuthService:
         # Create tokens
         tokens = self._create_and_store_tokens(user.id)
         
-        logger.info(f"User logged in with phone: {phone}")
+        # 使用 LogMasker 脱敏手机号 (Requirements: 2.4)
+        logger.info(f"User logged in with phone: {LogMasker.mask_phone(phone)}")
         return AuthResult(user=user, tokens=tokens)
     
     async def login_with_email(
@@ -591,8 +676,7 @@ class AuthService:
             - 2.6: Support email login for email-registered users
         """
         # Validate email format
-        if not self.validate_email(email):
-            raise InvalidEmailFormatError(f"Invalid email format: {email}")
+        self._validate_email_or_raise(email)
         
         # Find user
         user_id = self._users_by_email.get(email.lower())
@@ -608,7 +692,8 @@ class AuthService:
         # Create tokens
         tokens = self._create_and_store_tokens(user.id)
         
-        logger.info(f"User logged in with email: {email}")
+        # 使用 LogMasker 脱敏邮箱 (Requirements: 2.4)
+        logger.info(f"User logged in with email: {LogMasker.mask_email(email)}")
         return AuthResult(user=user, tokens=tokens)
     
     # ========================================================================
@@ -750,25 +835,33 @@ class AuthService:
 
 
 # ============================================================================
-# Global Instance
+# Global Instance (using ServiceProvider for thread-safe singleton)
 # ============================================================================
 
-_default_service: Optional[AuthService] = None
+from app.utils.service_provider import ServiceProvider
+
+_auth_service_provider: ServiceProvider[AuthService] = ServiceProvider(AuthService)
 
 
 def get_auth_service() -> AuthService:
-    """Get the default auth service instance (singleton).
+    """Get the default auth service instance (thread-safe singleton).
+    
+    Uses ServiceProvider with double-checked locking pattern to ensure
+    thread safety when multiple threads call this function concurrently.
     
     Returns:
         AuthService instance
+        
+    Requirements:
+        - 5.1: WHEN 多线程同时调用 get_auth_service() 时 THEN PopGraph SHALL 返回同一个 AuthService 实例
     """
-    global _default_service
-    if _default_service is None:
-        _default_service = AuthService()
-    return _default_service
+    return _auth_service_provider.get_instance()
 
 
 def reset_auth_service() -> None:
-    """Reset the auth service instance (for testing)."""
-    global _default_service
-    _default_service = None
+    """Reset the auth service instance (for testing).
+    
+    Requirements:
+        - 5.5: WHEN 测试需要重置单例时 THEN PopGraph SHALL 提供 reset() 方法清除实例
+    """
+    _auth_service_provider.reset()

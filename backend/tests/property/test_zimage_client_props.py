@@ -12,6 +12,7 @@ import sys
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
+import httpx
 import pytest
 
 # Add backend to path for imports
@@ -448,3 +449,201 @@ async def test_batch_generation_with_zero_count_returns_empty_list() -> None:
     assert results == [], (
         f"Batch generation with count=0 should return empty list, got {results}"
     )
+
+
+# ============================================================================
+# Property 8: HTTP 客户端复用
+# **Feature: system-optimization, Property 8: HTTP 客户端复用**
+# **Validates: Requirements 7.1**
+#
+# For any ZImageTurboClient instance making multiple requests, the same
+# httpx.AsyncClient instance SHALL be reused across all requests.
+# ============================================================================
+
+
+@pytest.mark.asyncio
+@settings(max_examples=100, deadline=None)
+@given(
+    num_calls=st.integers(min_value=2, max_value=10),
+)
+async def test_http_client_reuse_across_multiple_get_client_calls(num_calls: int) -> None:
+    """
+    **Feature: system-optimization, Property 8: HTTP 客户端复用**
+    **Validates: Requirements 7.1**
+    
+    Property: For any ZImageTurboClient instance, calling _get_client() multiple
+    times should return the same httpx.AsyncClient instance, ensuring connection
+    pool reuse.
+    """
+    # Arrange
+    client = ZImageTurboClient(api_key="mock-key", base_url="http://mock-api", timeout_ms=5000)
+    
+    try:
+        # Act: Call _get_client() multiple times
+        clients = []
+        for _ in range(num_calls):
+            http_client = await client._get_client()
+            clients.append(http_client)
+        
+        # Assert: All returned clients should be the same instance
+        first_client = clients[0]
+        for i, c in enumerate(clients[1:], start=2):
+            assert c is first_client, (
+                f"Call #{i} returned a different client instance. "
+                f"Expected same instance to be reused for connection pooling."
+            )
+        
+        # Verify the client is not closed
+        assert not first_client.is_closed, "HTTP client should not be closed while in use"
+    finally:
+        # Cleanup
+        await client.close()
+
+
+@pytest.mark.asyncio
+async def test_http_client_is_none_initially() -> None:
+    """
+    **Feature: system-optimization, Property 8: HTTP 客户端复用**
+    **Validates: Requirements 7.1**
+    
+    Property: A newly created ZImageTurboClient should have _client as None
+    (lazy initialization).
+    """
+    # Arrange & Act
+    client = ZImageTurboClient(api_key="mock-key", base_url="http://mock-api", timeout_ms=5000)
+    
+    # Assert: Client should be None before first use
+    assert client._client is None, (
+        "HTTP client should be None initially (lazy initialization)"
+    )
+
+
+@pytest.mark.asyncio
+async def test_http_client_created_on_first_get_client_call() -> None:
+    """
+    **Feature: system-optimization, Property 8: HTTP 客户端复用**
+    **Validates: Requirements 7.1**
+    
+    Property: The HTTP client should be created on the first call to _get_client()
+    and should be a valid httpx.AsyncClient instance.
+    """
+    # Arrange
+    client = ZImageTurboClient(api_key="mock-key", base_url="http://mock-api", timeout_ms=5000)
+    
+    try:
+        # Assert: Client is None before first call
+        assert client._client is None
+        
+        # Act: First call to _get_client()
+        http_client = await client._get_client()
+        
+        # Assert: Client is now created and valid
+        assert client._client is not None, "HTTP client should be created after first call"
+        assert isinstance(http_client, httpx.AsyncClient), (
+            f"Expected httpx.AsyncClient, got {type(http_client)}"
+        )
+        assert not http_client.is_closed, "HTTP client should not be closed"
+    finally:
+        await client.close()
+
+
+@pytest.mark.asyncio
+async def test_http_client_close_properly_closes_connection() -> None:
+    """
+    **Feature: system-optimization, Property 8: HTTP 客户端复用**
+    **Validates: Requirements 7.4**
+    
+    Property: Calling close() should properly close the HTTP client connection
+    and set _client to None.
+    """
+    # Arrange
+    client = ZImageTurboClient(api_key="mock-key", base_url="http://mock-api", timeout_ms=5000)
+    
+    # Create the HTTP client
+    http_client = await client._get_client()
+    assert http_client is not None
+    assert not http_client.is_closed
+    
+    # Act: Close the client
+    await client.close()
+    
+    # Assert: Client should be closed and _client should be None
+    assert client._client is None, "HTTP client reference should be None after close()"
+    assert http_client.is_closed, "HTTP client should be closed after close()"
+
+
+@pytest.mark.asyncio
+async def test_http_client_recreated_after_close() -> None:
+    """
+    **Feature: system-optimization, Property 8: HTTP 客户端复用**
+    **Validates: Requirements 7.1, 7.4**
+    
+    Property: After closing the client, calling _get_client() again should
+    create a new HTTP client instance.
+    """
+    # Arrange
+    client = ZImageTurboClient(api_key="mock-key", base_url="http://mock-api", timeout_ms=5000)
+    
+    try:
+        # Get first client
+        first_http_client = await client._get_client()
+        first_id = id(first_http_client)
+        
+        # Close the client
+        await client.close()
+        
+        # Get client again
+        second_http_client = await client._get_client()
+        second_id = id(second_http_client)
+        
+        # Assert: Should be a new instance
+        assert first_id != second_id, (
+            "After close(), _get_client() should create a new HTTP client instance"
+        )
+        assert not second_http_client.is_closed, "New HTTP client should not be closed"
+    finally:
+        await client.close()
+
+
+@pytest.mark.asyncio
+async def test_close_is_idempotent() -> None:
+    """
+    **Feature: system-optimization, Property 8: HTTP 客户端复用**
+    **Validates: Requirements 7.4**
+    
+    Property: Calling close() multiple times should be safe (idempotent).
+    """
+    # Arrange
+    client = ZImageTurboClient(api_key="mock-key", base_url="http://mock-api", timeout_ms=5000)
+    
+    # Create the HTTP client
+    await client._get_client()
+    
+    # Act: Close multiple times - should not raise
+    await client.close()
+    await client.close()
+    await client.close()
+    
+    # Assert: Client should still be None
+    assert client._client is None
+
+
+@pytest.mark.asyncio
+async def test_close_without_initialization_is_safe() -> None:
+    """
+    **Feature: system-optimization, Property 8: HTTP 客户端复用**
+    **Validates: Requirements 7.4**
+    
+    Property: Calling close() on a client that was never initialized should be safe.
+    """
+    # Arrange
+    client = ZImageTurboClient(api_key="mock-key", base_url="http://mock-api", timeout_ms=5000)
+    
+    # Assert: Client is None
+    assert client._client is None
+    
+    # Act: Close without ever initializing - should not raise
+    await client.close()
+    
+    # Assert: Client is still None
+    assert client._client is None

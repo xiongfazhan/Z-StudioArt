@@ -14,6 +14,7 @@ from sqlalchemy.orm import selectinload
 
 from app.models.database import GeneratedImageRecord, GenerationRecord, User
 from app.models.schemas import GenerationType, MembershipTier
+from app.utils.log_masker import LogMasker
 
 logger = logging.getLogger(__name__)
 
@@ -149,7 +150,8 @@ class HistoryService:
         )
 
         await self.db.commit()
-        logger.info(f"Deleted history record {record_id} for user {user_id}")
+        # 使用 LogMasker 脱敏用户 ID (Requirements: 2.4)
+        logger.info(f"Deleted history record {record_id} for user {LogMasker.mask_user_id(user_id)}")
         return True
 
     async def create_record(
@@ -187,7 +189,8 @@ class HistoryService:
         await self.db.commit()
         await self.db.refresh(record)
         
-        logger.info(f"Created history record {record.id} for user {user_id}")
+        # 使用 LogMasker 脱敏用户 ID (Requirements: 2.4)
+        logger.info(f"Created history record {record.id} for user {LogMasker.mask_user_id(user_id)}")
         return record
 
     async def cleanup_expired_records(self) -> int:
@@ -196,6 +199,9 @@ class HistoryService:
         Requirements:
         - 6.5: FREE users 7-day retention
         - 6.6: Paid users 90-day retention
+        - 8.1: Use batch query to get all expired record IDs
+        - 8.2: Use batch delete instead of per-record delete
+        - 8.3: Add transaction rollback handling
         
         Returns:
             Number of records deleted
@@ -204,48 +210,55 @@ class HistoryService:
         free_cutoff = now - timedelta(days=FREE_RETENTION_DAYS)
         paid_cutoff = now - timedelta(days=PAID_RETENTION_DAYS)
 
-        deleted_count = 0
-
-        # Get all users with their membership tiers
-        users_query = select(User.id, User.membership_tier)
-        users_result = await self.db.execute(users_query)
-        users = users_result.all()
-
-        for user_id, membership_tier in users:
-            # Determine cutoff date based on membership tier
-            if membership_tier == MembershipTier.FREE:
-                cutoff_date = free_cutoff
-            else:
-                # BASIC and PROFESSIONAL get 90 days
-                cutoff_date = paid_cutoff
-
-            # Find expired records for this user
-            expired_query = select(GenerationRecord.id).where(
-                GenerationRecord.user_id == user_id,
-                GenerationRecord.created_at < cutoff_date,
+        try:
+            # Requirements 8.1: Use single batch query to get all expired record IDs
+            # Join GenerationRecord with User to get membership tier and filter by cutoff date
+            # Free users: records older than 7 days
+            # Paid users: records older than 90 days
+            expired_query = (
+                select(GenerationRecord.id)
+                .join(User, GenerationRecord.user_id == User.id)
+                .where(
+                    # Free users with records older than free_cutoff
+                    ((User.membership_tier == MembershipTier.FREE) & 
+                     (GenerationRecord.created_at < free_cutoff)) |
+                    # Paid users with records older than paid_cutoff
+                    ((User.membership_tier != MembershipTier.FREE) & 
+                     (GenerationRecord.created_at < paid_cutoff))
+                )
             )
+            
             expired_result = await self.db.execute(expired_query)
             expired_ids = [row[0] for row in expired_result.all()]
-
-            if expired_ids:
-                # Delete associated images
-                await self.db.execute(
-                    delete(GeneratedImageRecord).where(
-                        GeneratedImageRecord.generation_id.in_(expired_ids)
-                    )
+            
+            if not expired_ids:
+                logger.info("No expired history records to clean up")
+                return 0
+            
+            # Requirements 8.2: Use batch delete for associated images
+            await self.db.execute(
+                delete(GeneratedImageRecord).where(
+                    GeneratedImageRecord.generation_id.in_(expired_ids)
                 )
-
-                # Delete the records
-                result = await self.db.execute(
-                    delete(GenerationRecord).where(
-                        GenerationRecord.id.in_(expired_ids)
-                    )
+            )
+            
+            # Requirements 8.2: Use batch delete for generation records
+            await self.db.execute(
+                delete(GenerationRecord).where(
+                    GenerationRecord.id.in_(expired_ids)
                 )
-                deleted_count += len(expired_ids)
-
-        await self.db.commit()
-        logger.info(f"Cleaned up {deleted_count} expired history records")
-        return deleted_count
+            )
+            
+            deleted_count = len(expired_ids)
+            await self.db.commit()
+            logger.info(f"Cleaned up {deleted_count} expired history records")
+            return deleted_count
+            
+        except Exception as e:
+            # Requirements 8.3: Rollback transaction on failure
+            await self.db.rollback()
+            logger.error(f"Failed to cleanup expired records: {e}")
+            raise
 
     def get_retention_days(self, membership_tier: MembershipTier) -> int:
         """Get the retention period in days for a membership tier.

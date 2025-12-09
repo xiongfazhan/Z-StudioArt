@@ -21,3 +21,6 @@ wechatpayv3>=1.2.0
 # S3 Storage
 boto3>=1.28.0
 greenlet
+
+# Retry mechanism
+tenacity>=8.2.0

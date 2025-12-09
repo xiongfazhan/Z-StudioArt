@@ -433,6 +433,34 @@ class SceneFusionService:
             data_url = f"data:image/png;base64,{image_base64}"
             return data_url, data_url, image_base64
     
+    def _validate_request(
+        self,
+        target_scene: str,
+        user_tier: MembershipTier,
+    ) -> None:
+        """验证场景融合请求
+        
+        提取权限检查和内容过滤的公共逻辑。
+        
+        Args:
+            target_scene: 目标场景描述
+            user_tier: 用户会员等级
+            
+        Raises:
+            FeatureNotAvailableError: 用户无权使用此功能
+            ContentBlockedError: 内容包含敏感词
+            
+        Requirements: 6.3 - 使用统一的 _validate_request() 方法
+        """
+        # 检查用户权限
+        if not self._membership_service.can_access_scene_fusion(user_tier):
+            raise FeatureNotAvailableError(MembershipTier.PROFESSIONAL)
+        
+        # 检查内容安全
+        filter_result = self._content_filter.check_content(target_scene)
+        if not filter_result.is_allowed:
+            raise ContentBlockedError(filter_result.blocked_keywords)
+    
     async def process_scene_fusion(
         self,
         request: SceneFusionRequest,
@@ -467,14 +495,8 @@ class SceneFusionService:
         - 5.1: 生成图片后上传到 S3，返回 CDN URL
         - 7.4: 专业会员权限检查
         """
-        # Step 1: 检查用户权限
-        if not self._membership_service.can_access_scene_fusion(user_tier):
-            raise FeatureNotAvailableError(MembershipTier.PROFESSIONAL)
-        
-        # Step 2: 检查内容安全
-        filter_result = self._content_filter.check_content(request.target_scene)
-        if not filter_result.is_allowed:
-            raise ContentBlockedError(filter_result.blocked_keywords)
+        # Step 1 & 2: 验证请求（权限检查和内容过滤）
+        self._validate_request(request.target_scene, user_tier)
         
         # Step 3: 提取商品主体
         product = await self.extract_product(request.product_image_url)
@@ -516,14 +538,8 @@ class SceneFusionService:
         start_time = time.perf_counter()
         request_id = str(uuid.uuid4())
         
-        # 检查用户权限
-        if not self._membership_service.can_access_scene_fusion(user_tier):
-            raise FeatureNotAvailableError(MembershipTier.PROFESSIONAL)
-        
-        # 检查内容安全
-        filter_result = self._content_filter.check_content(target_scene)
-        if not filter_result.is_allowed:
-            raise ContentBlockedError(filter_result.blocked_keywords)
+        # 验证请求（权限检查和内容过滤）
+        self._validate_request(target_scene, user_tier)
         
         # 提取商品主体
         product = self._product_extractor.extract(image_data)

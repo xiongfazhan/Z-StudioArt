@@ -1,6 +1,8 @@
 /**
  * PopGraph 应用主组件
  * 集成路由和认证状态管理
+ * 
+ * _Requirements: 9.1, 9.2, 9.3, 9.4_
  */
 
 import { useEffect, useState } from 'react';
@@ -9,14 +11,17 @@ import './App.css';
 import { PosterGeneratorPage } from './components/PosterGeneratorPage';
 import { SceneFusionPage } from './components/SceneFusionPage';
 import { ProtectedRoute, PublicRoute } from './components/ProtectedRoute';
+import { ErrorBoundary } from './components/common/ErrorBoundary';
+import { UserInfoBar } from './components/layout/UserInfoBar';
+import { BottomNavigation } from './components/layout/BottomNavigation';
+import type { PageType } from './components/layout/BottomNavigation';
 import { LoginPage, RegisterPage, HistoryPage, SubscriptionPage } from './pages';
 import { useAuthStore } from './stores/authStore';
 import { apiService } from './services/api';
 
-type PageType = 'poster' | 'scene-fusion';
-
 /**
  * 主页面组件 - 包含海报生成和场景融合功能
+ * 使用 UserInfoBar 和 BottomNavigation 组件
  */
 function MainPage() {
   const [currentPage, setCurrentPage] = useState<PageType>('poster');
@@ -38,76 +43,11 @@ function MainPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 to-gray-800">
-      {/* User Info Bar */}
-      {user && (
-        <div className="fixed top-4 right-4 z-50 flex items-center gap-3">
-          <div className="px-4 py-2 bg-gray-800/90 backdrop-blur-sm rounded-full border border-gray-700 shadow-lg flex items-center gap-3">
-            <span className="text-sm text-gray-300">
-              {user.phone || user.email}
-            </span>
-            <button
-              onClick={() => navigate('/subscription')}
-              className={`text-xs px-2 py-0.5 rounded-full cursor-pointer hover:opacity-80 transition-opacity ${
-                user.membership_tier === 'professional' 
-                  ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
-                  : user.membership_tier === 'basic'
-                  ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
-                  : 'bg-gray-500/20 text-gray-300 border border-gray-500/30'
-              }`}
-              title="会员订阅"
-            >
-              {user.membership_tier === 'professional' ? '专业版' : user.membership_tier === 'basic' ? '基础版' : '免费版'}
-            </button>
-            <button
-              onClick={() => navigate('/history')}
-              className="text-sm text-gray-400 hover:text-white transition-colors"
-              title="生成历史"
-            >
-              📜
-            </button>
-            <button
-              onClick={() => navigate('/subscription')}
-              className="text-sm text-gray-400 hover:text-white transition-colors"
-              title="会员订阅"
-            >
-              👑
-            </button>
-            <button
-              onClick={handleLogout}
-              className="text-sm text-gray-400 hover:text-white transition-colors"
-              title="退出登录"
-            >
-              退出
-            </button>
-          </div>
-        </div>
-      )}
+      {/* User Info Bar - 使用独立组件 */}
+      {user && <UserInfoBar user={user} onLogout={handleLogout} />}
 
-      {/* Navigation */}
-      <nav className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50">
-        <div className="flex gap-2 p-2 bg-gray-800/90 backdrop-blur-sm rounded-full border border-gray-700 shadow-lg">
-          <button
-            onClick={() => setCurrentPage('poster')}
-            className={`px-6 py-2 rounded-full text-sm font-medium transition-colors ${
-              currentPage === 'poster'
-                ? 'bg-red-600 text-white'
-                : 'text-gray-300 hover:text-white hover:bg-gray-700'
-            }`}
-          >
-            🎨 海报生成
-          </button>
-          <button
-            onClick={() => setCurrentPage('scene-fusion')}
-            className={`px-6 py-2 rounded-full text-sm font-medium transition-colors ${
-              currentPage === 'scene-fusion'
-                ? 'bg-red-600 text-white'
-                : 'text-gray-300 hover:text-white hover:bg-gray-700'
-            }`}
-          >
-            🖼️ 场景融合
-          </button>
-        </div>
-      </nav>
+      {/* Bottom Navigation - 使用独立组件 */}
+      <BottomNavigation currentPage={currentPage} onPageChange={setCurrentPage} />
 
       {/* Page Content */}
       {currentPage === 'poster' && <PosterGeneratorPage />}
@@ -164,67 +104,70 @@ function AppInitializer({ children }: { children: React.ReactNode }) {
 
 /**
  * 应用根组件
+ * 使用 ErrorBoundary 包装整个应用以捕获错误
  */
 function App() {
   return (
-    <BrowserRouter>
-      <AppInitializer>
-        <Routes>
-          {/* 公开路由 - 登录页 */}
-          <Route
-            path="/login"
-            element={
-              <PublicRoute>
-                <LoginPage />
-              </PublicRoute>
-            }
-          />
-          
-          {/* 公开路由 - 注册页 */}
-          <Route
-            path="/register"
-            element={
-              <PublicRoute>
-                <RegisterPage />
-              </PublicRoute>
-            }
-          />
-          
-          {/* 受保护路由 - 主页面 */}
-          <Route
-            path="/"
-            element={
-              <ProtectedRoute>
-                <MainPage />
-              </ProtectedRoute>
-            }
-          />
-          
-          {/* 受保护路由 - 历史记录页面 */}
-          <Route
-            path="/history"
-            element={
-              <ProtectedRoute>
-                <HistoryPage />
-              </ProtectedRoute>
-            }
-          />
-          
-          {/* 受保护路由 - 订阅页面 */}
-          <Route
-            path="/subscription"
-            element={
-              <ProtectedRoute>
-                <SubscriptionPage />
-              </ProtectedRoute>
-            }
-          />
-          
-          {/* 其他路由重定向到首页 */}
-          <Route path="*" element={<ProtectedRoute><MainPage /></ProtectedRoute>} />
-        </Routes>
-      </AppInitializer>
-    </BrowserRouter>
+    <ErrorBoundary>
+      <BrowserRouter>
+        <AppInitializer>
+          <Routes>
+            {/* 公开路由 - 登录页 */}
+            <Route
+              path="/login"
+              element={
+                <PublicRoute>
+                  <LoginPage />
+                </PublicRoute>
+              }
+            />
+            
+            {/* 公开路由 - 注册页 */}
+            <Route
+              path="/register"
+              element={
+                <PublicRoute>
+                  <RegisterPage />
+                </PublicRoute>
+              }
+            />
+            
+            {/* 受保护路由 - 主页面 */}
+            <Route
+              path="/"
+              element={
+                <ProtectedRoute>
+                  <MainPage />
+                </ProtectedRoute>
+              }
+            />
+            
+            {/* 受保护路由 - 历史记录页面 */}
+            <Route
+              path="/history"
+              element={
+                <ProtectedRoute>
+                  <HistoryPage />
+                </ProtectedRoute>
+              }
+            />
+            
+            {/* 受保护路由 - 订阅页面 */}
+            <Route
+              path="/subscription"
+              element={
+                <ProtectedRoute>
+                  <SubscriptionPage />
+                </ProtectedRoute>
+              }
+            />
+            
+            {/* 其他路由重定向到首页 */}
+            <Route path="*" element={<ProtectedRoute><MainPage /></ProtectedRoute>} />
+          </Routes>
+        </AppInitializer>
+      </BrowserRouter>
+    </ErrorBoundary>
   );
 }
 

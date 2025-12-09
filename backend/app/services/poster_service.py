@@ -230,6 +230,75 @@ class PosterService:
         self._watermark_processor = watermark_processor or WatermarkProcessor()
         self._storage_service = storage_service
     
+    async def _generate_poster_internal(
+        self,
+        request: PosterGenerationRequest,
+        user_tier: MembershipTier = MembershipTier.FREE,
+    ) -> tuple[str, list[bytes], WatermarkRule, int, int]:
+        """海报生成的内部公共逻辑
+        
+        提取 generate_poster 和 generate_poster_with_storage 的公共逻辑：
+        1. 内容过滤检查
+        2. 构建 Prompt（可选应用模板）
+        3. 调用 AI 模型生成图像
+        4. 根据会员等级添加水印
+        
+        Args:
+            request: 海报生成请求
+            user_tier: 用户会员等级
+            
+        Returns:
+            (request_id, processed_images, watermark_rule, width, height) 元组
+            - request_id: 请求 ID
+            - processed_images: 处理后的图像数据列表（已添加水印）
+            - watermark_rule: 水印规则
+            - width: 图像宽度
+            - height: 图像高度
+            
+        Raises:
+            ContentBlockedError: 内容包含敏感词
+            TemplateNotFoundError: 指定的模板不存在
+            
+        Requirements: 6.2 - 消除重复代码
+        """
+        request_id = str(uuid.uuid4())
+        
+        # Step 1: 内容过滤检查
+        await self._check_content(request)
+        
+        # Step 2: 构建 Prompt
+        prompt = await self._build_prompt(request)
+        
+        # Step 3: 计算图像尺寸
+        width, height = calculate_image_dimensions(
+            request.aspect_ratio,
+            custom_width=request.custom_width,
+            custom_height=request.custom_height,
+        )
+        options = GenerationOptions(width=width, height=height)
+        
+        # Step 4: 调用 AI 模型生成图像
+        if request.batch_size == 1:
+            image_data_list = [await self._zimage_client.generate_image(prompt, options)]
+        else:
+            image_data_list = await self._zimage_client.generate_batch(
+                prompt, request.batch_size, options
+            )
+        
+        # Step 5: 获取水印规则
+        watermark_rule = self._membership_service.get_watermark_rule(user_tier)
+        
+        # Step 6: 处理生成的图像（添加水印）
+        processed_images = []
+        for image_data in image_data_list:
+            processed_image = self._watermark_processor.add_watermark(
+                image_data.image_buffer,
+                watermark_rule,
+            )
+            processed_images.append(processed_image)
+        
+        return request_id, processed_images, watermark_rule, width, height
+    
     async def generate_poster(
         self,
         request: PosterGenerationRequest,
@@ -268,42 +337,14 @@ class PosterService:
         - 7.1, 7.3: 水印规则
         """
         start_time = time.perf_counter()
-        request_id = str(uuid.uuid4())
         
-        # Step 1: 内容过滤检查
-        await self._check_content(request)
+        # 调用内部公共方法
+        request_id, processed_images, watermark_rule, width, height = \
+            await self._generate_poster_internal(request, user_tier)
         
-        # Step 2: 构建 Prompt
-        prompt = await self._build_prompt(request)
-        
-        # Step 3: 计算图像尺寸
-        width, height = calculate_image_dimensions(
-            request.aspect_ratio,
-            custom_width=request.custom_width,
-            custom_height=request.custom_height,
-        )
-        options = GenerationOptions(width=width, height=height)
-        
-        # Step 4: 调用 AI 模型生成图像
-        if request.batch_size == 1:
-            image_data_list = [await self._zimage_client.generate_image(prompt, options)]
-        else:
-            image_data_list = await self._zimage_client.generate_batch(
-                prompt, request.batch_size, options
-            )
-        
-        # Step 5: 获取水印规则
-        watermark_rule = self._membership_service.get_watermark_rule(user_tier)
-        
-        # Step 6: 处理生成的图像（添加水印、上传到 S3）
+        # 处理生成的图像（上传到 S3）
         generated_images = []
-        for i, image_data in enumerate(image_data_list):
-            # 添加水印
-            processed_image = self._watermark_processor.add_watermark(
-                image_data.image_buffer,
-                watermark_rule,
-            )
-            
+        for i, processed_image in enumerate(processed_images):
             # 创建图像记录
             image_id = f"{request_id}-{i}"
             
@@ -454,48 +495,18 @@ class PosterService:
             
         Returns:
             (PosterGenerationResponse, list[bytes]): 响应和图像数据列表
+            
+        Requirements: 6.2 - 使用 _generate_poster_internal() 消除重复代码
         """
         start_time = time.perf_counter()
-        request_id = str(uuid.uuid4())
         
-        # 内容过滤检查
-        await self._check_content(request)
+        # 调用内部公共方法
+        request_id, processed_images, watermark_rule, width, height = \
+            await self._generate_poster_internal(request, user_tier)
         
-        # 构建 Prompt
-        prompt = await self._build_prompt(request)
-        
-        # 计算图像尺寸
-        width, height = calculate_image_dimensions(
-            request.aspect_ratio,
-            custom_width=request.custom_width,
-            custom_height=request.custom_height,
-        )
-        options = GenerationOptions(width=width, height=height)
-        
-        # 调用 AI 模型生成图像
-        if request.batch_size == 1:
-            image_data_list = [await self._zimage_client.generate_image(prompt, options)]
-        else:
-            image_data_list = await self._zimage_client.generate_batch(
-                prompt, request.batch_size, options
-            )
-        
-        # 获取水印规则
-        watermark_rule = self._membership_service.get_watermark_rule(user_tier)
-        
-        # 处理生成的图像
+        # 构建响应
         generated_images = []
-        processed_image_data = []
-        
-        for i, image_data in enumerate(image_data_list):
-            # 添加水印
-            processed_image = self._watermark_processor.add_watermark(
-                image_data.image_buffer,
-                watermark_rule,
-            )
-            processed_image_data.append(processed_image)
-            
-            # 创建图像记录
+        for i, processed_image in enumerate(processed_images):
             image_id = f"{request_id}-{i}"
             generated_images.append(
                 GeneratedImage(
@@ -517,7 +528,7 @@ class PosterService:
             processing_time_ms=processing_time_ms,
         )
         
-        return response, processed_image_data
+        return response, processed_images
 
 
 # 创建默认的全局实例

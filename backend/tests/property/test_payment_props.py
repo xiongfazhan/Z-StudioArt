@@ -461,3 +461,272 @@ def test_duplicate_payment_success_raises_error(
         assert "status" in str(e).lower() or isinstance(e, InvalidOrderStatusError), (
             f"Should raise error about invalid status. Got: {e}"
         )
+
+
+# ============================================================================
+# Property 6: 订单状态转换合法性
+# **Feature: system-optimization, Property 6: 订单状态转换合法性**
+# **Validates: Requirements 4.1, 4.2, 4.3, 4.4**
+#
+# For any order status and target status, status transitions SHALL only be 
+# allowed when defined in VALID_STATUS_TRANSITIONS
+# ============================================================================
+
+from app.services.payment_service import (
+    validate_status_transition,
+    VALID_STATUS_TRANSITIONS,
+    InvalidOrderStatusError,
+)
+
+
+# Strategy for all payment statuses
+payment_status_strategy = st.sampled_from(list(PaymentStatus))
+
+
+@settings(max_examples=100)
+@given(
+    old_status=payment_status_strategy,
+    new_status=payment_status_strategy,
+)
+def test_status_transition_validation_matches_definition(
+    old_status: PaymentStatus,
+    new_status: PaymentStatus,
+) -> None:
+    """
+    **Feature: system-optimization, Property 6: 订单状态转换合法性**
+    **Validates: Requirements 4.1, 4.2, 4.3, 4.4**
+    
+    Property: For any status pair, validate_status_transition() SHALL return True
+    if and only if the transition is defined in VALID_STATUS_TRANSITIONS.
+    """
+    # Get expected result from definition
+    valid_transitions = VALID_STATUS_TRANSITIONS.get(old_status, set())
+    expected = new_status in valid_transitions
+    
+    # Act
+    result = validate_status_transition(old_status, new_status)
+    
+    # Assert
+    assert result == expected, (
+        f"validate_status_transition({old_status.value}, {new_status.value}) "
+        f"returned {result}, expected {expected}"
+    )
+
+
+@settings(max_examples=100)
+@given(
+    user_id=user_id_strategy,
+    plan=plan_strategy,
+    method=payment_method_strategy,
+    invalid_target=st.sampled_from([PaymentStatus.PENDING, PaymentStatus.REFUNDED]),
+)
+def test_pending_order_rejects_invalid_transitions(
+    user_id: str,
+    plan: SubscriptionPlan,
+    method: PaymentMethod,
+    invalid_target: PaymentStatus,
+) -> None:
+    """
+    **Feature: system-optimization, Property 6: 订单状态转换合法性**
+    **Validates: Requirements 4.1**
+    
+    Property: For any PENDING order, transitions to PENDING or REFUNDED 
+    SHALL be rejected with InvalidOrderStatusError.
+    """
+    # Arrange
+    service = PaymentService()
+    order = service.create_order(user_id, plan, method)
+    assert order.status == PaymentStatus.PENDING
+    
+    # Act & Assert
+    with pytest.raises(InvalidOrderStatusError) as exc_info:
+        service._update_order_status(order, invalid_target)
+    
+    assert exc_info.value.old_status == PaymentStatus.PENDING
+    assert exc_info.value.new_status == invalid_target
+
+
+@settings(max_examples=100)
+@given(
+    user_id=user_id_strategy,
+    plan=plan_strategy,
+    method=payment_method_strategy,
+    valid_target=st.sampled_from([PaymentStatus.PAID, PaymentStatus.FAILED, PaymentStatus.EXPIRED]),
+)
+def test_pending_order_accepts_valid_transitions(
+    user_id: str,
+    plan: SubscriptionPlan,
+    method: PaymentMethod,
+    valid_target: PaymentStatus,
+) -> None:
+    """
+    **Feature: system-optimization, Property 6: 订单状态转换合法性**
+    **Validates: Requirements 4.1**
+    
+    Property: For any PENDING order, transitions to PAID, FAILED, or EXPIRED
+    SHALL be accepted.
+    """
+    # Arrange
+    service = PaymentService()
+    order = service.create_order(user_id, plan, method)
+    assert order.status == PaymentStatus.PENDING
+    
+    # Act
+    service._update_order_status(order, valid_target)
+    
+    # Assert
+    assert order.status == valid_target
+
+
+@settings(max_examples=100)
+@given(
+    user_id=user_id_strategy,
+    plan=plan_strategy,
+    method=payment_method_strategy,
+    invalid_target=st.sampled_from([
+        PaymentStatus.PENDING, PaymentStatus.PAID, 
+        PaymentStatus.FAILED, PaymentStatus.EXPIRED
+    ]),
+)
+def test_paid_order_rejects_invalid_transitions(
+    user_id: str,
+    plan: SubscriptionPlan,
+    method: PaymentMethod,
+    invalid_target: PaymentStatus,
+) -> None:
+    """
+    **Feature: system-optimization, Property 6: 订单状态转换合法性**
+    **Validates: Requirements 4.2**
+    
+    Property: For any PAID order, transitions to anything except REFUNDED
+    SHALL be rejected with InvalidOrderStatusError.
+    """
+    # Arrange
+    service = PaymentService()
+    order = service.create_order(user_id, plan, method)
+    # First transition to PAID
+    service._update_order_status(order, PaymentStatus.PAID)
+    assert order.status == PaymentStatus.PAID
+    
+    # Act & Assert
+    with pytest.raises(InvalidOrderStatusError) as exc_info:
+        service._update_order_status(order, invalid_target)
+    
+    assert exc_info.value.old_status == PaymentStatus.PAID
+    assert exc_info.value.new_status == invalid_target
+
+
+@settings(max_examples=100)
+@given(
+    user_id=user_id_strategy,
+    plan=plan_strategy,
+    method=payment_method_strategy,
+)
+def test_paid_order_accepts_refund_transition(
+    user_id: str,
+    plan: SubscriptionPlan,
+    method: PaymentMethod,
+) -> None:
+    """
+    **Feature: system-optimization, Property 6: 订单状态转换合法性**
+    **Validates: Requirements 4.2**
+    
+    Property: For any PAID order, transition to REFUNDED SHALL be accepted.
+    """
+    # Arrange
+    service = PaymentService()
+    order = service.create_order(user_id, plan, method)
+    service._update_order_status(order, PaymentStatus.PAID)
+    assert order.status == PaymentStatus.PAID
+    
+    # Act
+    service._update_order_status(order, PaymentStatus.REFUNDED)
+    
+    # Assert
+    assert order.status == PaymentStatus.REFUNDED
+
+
+@settings(max_examples=100)
+@given(
+    user_id=user_id_strategy,
+    plan=plan_strategy,
+    method=payment_method_strategy,
+    terminal_status=st.sampled_from([
+        PaymentStatus.FAILED, PaymentStatus.EXPIRED, PaymentStatus.REFUNDED
+    ]),
+    any_target=payment_status_strategy,
+)
+def test_terminal_status_rejects_all_transitions(
+    user_id: str,
+    plan: SubscriptionPlan,
+    method: PaymentMethod,
+    terminal_status: PaymentStatus,
+    any_target: PaymentStatus,
+) -> None:
+    """
+    **Feature: system-optimization, Property 6: 订单状态转换合法性**
+    **Validates: Requirements 4.3**
+    
+    Property: For any order in terminal status (FAILED, EXPIRED, REFUNDED),
+    ALL transitions SHALL be rejected with InvalidOrderStatusError.
+    """
+    # Arrange
+    service = PaymentService()
+    order = service.create_order(user_id, plan, method)
+    
+    # Get to terminal status via valid path
+    if terminal_status == PaymentStatus.REFUNDED:
+        service._update_order_status(order, PaymentStatus.PAID)
+        service._update_order_status(order, PaymentStatus.REFUNDED)
+    else:
+        service._update_order_status(order, terminal_status)
+    
+    assert order.status == terminal_status
+    
+    # Act & Assert
+    with pytest.raises(InvalidOrderStatusError) as exc_info:
+        service._update_order_status(order, any_target)
+    
+    assert exc_info.value.old_status == terminal_status
+    assert exc_info.value.new_status == any_target
+
+
+@settings(max_examples=100)
+@given(
+    user_id=user_id_strategy,
+    plan=plan_strategy,
+    method=payment_method_strategy,
+)
+def test_invalid_transition_raises_with_correct_attributes(
+    user_id: str,
+    plan: SubscriptionPlan,
+    method: PaymentMethod,
+) -> None:
+    """
+    **Feature: system-optimization, Property 6: 订单状态转换合法性**
+    **Validates: Requirements 4.4**
+    
+    Property: For any invalid status transition, InvalidOrderStatusError SHALL
+    be raised with old_status and new_status attributes set correctly.
+    """
+    # Arrange
+    service = PaymentService()
+    order = service.create_order(user_id, plan, method)
+    
+    # Try invalid transition: PENDING -> REFUNDED
+    old_status = PaymentStatus.PENDING
+    new_status = PaymentStatus.REFUNDED
+    
+    # Act & Assert
+    with pytest.raises(InvalidOrderStatusError) as exc_info:
+        service._update_order_status(order, new_status)
+    
+    error = exc_info.value
+    assert error.old_status == old_status, (
+        f"old_status should be {old_status.value}, got {error.old_status}"
+    )
+    assert error.new_status == new_status, (
+        f"new_status should be {new_status.value}, got {error.new_status}"
+    )
+    assert old_status.value in str(error), "Error message should contain old status"
+    assert new_status.value in str(error), "Error message should contain new status"

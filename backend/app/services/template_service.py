@@ -313,3 +313,36 @@ class TemplateService:
             t for t in HOLIDAY_TEMPLATES
             if t.holiday_type == holiday_type
         ]
+
+
+# ============================================================================
+# Global Instance (using ServiceProvider for thread-safe singleton)
+# ============================================================================
+
+from app.utils.service_provider import ServiceProvider
+
+_template_service_provider: ServiceProvider[TemplateService] = ServiceProvider(TemplateService)
+
+
+def get_template_service() -> TemplateService:
+    """Get the default template service instance (thread-safe singleton).
+    
+    Uses ServiceProvider with double-checked locking pattern to ensure
+    thread safety when multiple threads call this function concurrently.
+    
+    Returns:
+        TemplateService instance
+        
+    Requirements:
+        - 5.3: WHEN 多线程同时调用 get_template_service() 时 THEN PopGraph SHALL 返回同一个 TemplateService 实例
+    """
+    return _template_service_provider.get_instance()
+
+
+def reset_template_service() -> None:
+    """Reset the template service instance (for testing).
+    
+    Requirements:
+        - 5.5: WHEN 测试需要重置单例时 THEN PopGraph SHALL 提供 reset() 方法清除实例
+    """
+    _template_service_provider.reset()

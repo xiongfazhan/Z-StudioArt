@@ -11,5 +11,8 @@ Thumbs.db
 .gemini-clipboard/
 .kiro/
 
+# Testing
+.hypothesis/
+
 # Project specific exclusions that might be in root
 *.log

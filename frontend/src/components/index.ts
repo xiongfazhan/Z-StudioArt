@@ -2,6 +2,14 @@
  * 组件导出索引
  */
 
+// 通用组件
+export { ErrorBoundary, ErrorFallback } from './common/ErrorBoundary';
+
+// 布局组件
+export { UserInfoBar } from './layout/UserInfoBar';
+export { BottomNavigation } from './layout/BottomNavigation';
+export type { PageType } from './layout/BottomNavigation';
+
 // 输入组件
 export { SceneDescriptionInput } from './SceneDescriptionInput';
 export { MarketingTextInput } from './MarketingTextInput';

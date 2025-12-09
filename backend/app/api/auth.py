@@ -18,6 +18,7 @@ Requirements:
 """
 
 from datetime import datetime
+from enum import Enum
 from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -136,21 +137,43 @@ class MessageResponse(BaseModel):
 # Error Codes
 # ============================================================================
 
-class ErrorCode:
-    """错误码定义"""
+
+class ErrorCode(str, Enum):
+    """API 错误码定义
+    
+    继承自 str 和 Enum，提供类型安全和 IDE 自动补全支持。
+    JSON 序列化时自动输出字符串值。
+    
+    Requirements:
+    - 10.1: WHEN 定义 API 错误码时 THEN PopGraph SHALL 使用继承自 str 和 Enum 的 ErrorCode 类
+    - 10.2: WHEN 返回错误响应时 THEN PopGraph SHALL 使用 ErrorCode 枚举值而非字符串字面量
+    - 10.3: WHEN 序列化错误码到 JSON 时 THEN PopGraph SHALL 输出枚举的字符串值
+    """
+    # 输入验证错误
     INVALID_PHONE = "INVALID_PHONE"
     INVALID_EMAIL = "INVALID_EMAIL"
     INVALID_CODE = "INVALID_CODE"
+    WEAK_PASSWORD = "WEAK_PASSWORD"
+    INPUT_TOO_LONG = "INPUT_TOO_LONG"
+    
+    # 认证错误
     INVALID_CREDENTIALS = "INVALID_CREDENTIALS"
+    UNAUTHORIZED = "UNAUTHORIZED"
+    
+    # 资源冲突
     PHONE_EXISTS = "PHONE_EXISTS"
     EMAIL_EXISTS = "EMAIL_EXISTS"
+    
+    # 用户相关
     USER_NOT_FOUND = "USER_NOT_FOUND"
-    WEAK_PASSWORD = "WEAK_PASSWORD"
+    
+    # Token 相关
     TOKEN_EXPIRED = "TOKEN_EXPIRED"
     TOKEN_INVALID = "TOKEN_INVALID"
     TOKEN_REVOKED = "TOKEN_REVOKED"
+    
+    # 限流
     RATE_LIMITED = "RATE_LIMITED"
-    UNAUTHORIZED = "UNAUTHORIZED"
 
 
 # ============================================================================
@@ -166,6 +189,33 @@ def user_to_response(user: User) -> UserResponse:
         membership_tier=user.membership_tier,
         membership_expiry=user.membership_expiry,
         created_at=user.created_at,
+    )
+
+
+def auth_result_to_response(result) -> AuthResponse:
+    """将 AuthResult 对象转换为 AuthResponse
+    
+    提取重复的 AuthResponse 构建逻辑，统一用于 register_with_phone、
+    register_with_email、login_with_phone、login_with_email 端点。
+    
+    Args:
+        result: AuthResult 对象，包含 user 和 tokens 属性
+        
+    Returns:
+        AuthResponse 对象
+        
+    Requirements:
+        - 6.1: WHEN 构建 AuthResponse 时 THEN PopGraph SHALL 使用统一的 
+               auth_result_to_response() 函数
+    """
+    return AuthResponse(
+        user=user_to_response(result.user),
+        tokens=TokenResponse(
+            access_token=result.tokens.access_token,
+            refresh_token=result.tokens.refresh_token,
+            token_type=result.tokens.token_type,
+            expires_in=result.tokens.expires_in,
+        ),
     )
 
 
@@ -326,15 +376,7 @@ async def register_with_phone(
     """
     try:
         result = await auth_service.register_with_phone(request.phone, request.code)
-        return AuthResponse(
-            user=user_to_response(result.user),
-            tokens=TokenResponse(
-                access_token=result.tokens.access_token,
-                refresh_token=result.tokens.refresh_token,
-                token_type=result.tokens.token_type,
-                expires_in=result.tokens.expires_in,
-            ),
-        )
+        return auth_result_to_response(result)
     except InvalidPhoneFormatError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -383,15 +425,7 @@ async def register_with_email(
     """
     try:
         result = await auth_service.register_with_email(request.email, request.password)
-        return AuthResponse(
-            user=user_to_response(result.user),
-            tokens=TokenResponse(
-                access_token=result.tokens.access_token,
-                refresh_token=result.tokens.refresh_token,
-                token_type=result.tokens.token_type,
-                expires_in=result.tokens.expires_in,
-            ),
-        )
+        return auth_result_to_response(result)
     except InvalidEmailFormatError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -438,15 +472,7 @@ async def login_with_phone(
     """
     try:
         result = await auth_service.login_with_phone(request.phone, request.code)
-        return AuthResponse(
-            user=user_to_response(result.user),
-            tokens=TokenResponse(
-                access_token=result.tokens.access_token,
-                refresh_token=result.tokens.refresh_token,
-                token_type=result.tokens.token_type,
-                expires_in=result.tokens.expires_in,
-            ),
-        )
+        return auth_result_to_response(result)
     except InvalidPhoneFormatError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -493,15 +519,7 @@ async def login_with_email(
     """
     try:
         result = await auth_service.login_with_email(request.email, request.password)
-        return AuthResponse(
-            user=user_to_response(result.user),
-            tokens=TokenResponse(
-                access_token=result.tokens.access_token,
-                refresh_token=result.tokens.refresh_token,
-                token_type=result.tokens.token_type,
-                expires_in=result.tokens.expires_in,
-            ),
-        )
+        return auth_result_to_response(result)
     except InvalidEmailFormatError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

@@ -40,6 +40,7 @@ from app.services.payment_gateway import (
     PaymentResult,
     get_payment_gateway,
 )
+from app.utils.log_masker import LogMasker
 
 
 logger = logging.getLogger(__name__)
@@ -76,6 +77,38 @@ PLAN_DURATIONS: dict[SubscriptionPlan, int] = {
 # 订单过期时间（分钟）
 ORDER_EXPIRY_MINUTES = 30
 
+# 有效的订单状态转换映射
+# Requirements: 4.1, 4.2, 4.3, 4.4
+VALID_STATUS_TRANSITIONS: dict[PaymentStatus, set[PaymentStatus]] = {
+    PaymentStatus.PENDING: {PaymentStatus.PAID, PaymentStatus.FAILED, PaymentStatus.EXPIRED},
+    PaymentStatus.PAID: {PaymentStatus.REFUNDED},
+    PaymentStatus.FAILED: set(),      # 终态，不允许任何转换
+    PaymentStatus.EXPIRED: set(),     # 终态，不允许任何转换
+    PaymentStatus.REFUNDED: set(),    # 终态，不允许任何转换
+}
+
+
+def validate_status_transition(
+    old_status: PaymentStatus,
+    new_status: PaymentStatus,
+) -> bool:
+    """验证订单状态转换是否合法。
+    
+    Args:
+        old_status: 当前状态
+        new_status: 目标状态
+        
+    Returns:
+        True 如果转换合法，False 否则
+        
+    Requirements:
+        - 4.1: PENDING 只能转换到 PAID、FAILED 或 EXPIRED
+        - 4.2: PAID 只能转换到 REFUNDED
+        - 4.3: FAILED、EXPIRED、REFUNDED 为终态，不允许任何转换
+    """
+    valid_transitions = VALID_STATUS_TRANSITIONS.get(old_status, set())
+    return new_status in valid_transitions
+
 
 # ============================================================================
 # Exceptions
@@ -97,8 +130,22 @@ class OrderExpiredError(PaymentError):
 
 
 class InvalidOrderStatusError(PaymentError):
-    """Raised when order status transition is invalid."""
-    pass
+    """Raised when order status transition is invalid.
+    
+    Attributes:
+        old_status: The current status of the order
+        new_status: The attempted target status
+    """
+    
+    def __init__(
+        self,
+        message: str,
+        old_status: Optional[PaymentStatus] = None,
+        new_status: Optional[PaymentStatus] = None,
+    ):
+        super().__init__(message)
+        self.old_status = old_status
+        self.new_status = new_status
 
 
 class UserNotFoundError(PaymentError):
@@ -299,8 +346,9 @@ class PaymentService:
             self._orders_by_user[user_id] = []
         self._orders_by_user[user_id].append(order_id)
         
+        # 使用 LogMasker 脱敏用户 ID (Requirements: 2.4)
         logger.info(
-            f"Created order: id={order_id}, user={user_id}, "
+            f"Created order: id={order_id}, user={LogMasker.mask_user_id(user_id)}, "
             f"plan={plan.value}, method={method.value}, amount={order.amount}"
         )
         
@@ -409,13 +457,31 @@ class PaymentService:
         order: PaymentOrder,
         new_status: PaymentStatus,
     ) -> None:
-        """Update order status.
+        """Update order status with validation.
         
         Args:
             order: PaymentOrder to update
             new_status: New status
+            
+        Raises:
+            InvalidOrderStatusError: If the status transition is not valid
+            
+        Requirements:
+            - 4.1: PENDING 只能转换到 PAID、FAILED 或 EXPIRED
+            - 4.2: PAID 只能转换到 REFUNDED
+            - 4.3: FAILED、EXPIRED、REFUNDED 为终态
+            - 4.4: 非法转换抛出 InvalidOrderStatusError
         """
         old_status = order.status
+        
+        # 验证状态转换是否合法
+        if not validate_status_transition(old_status, new_status):
+            raise InvalidOrderStatusError(
+                f"Invalid status transition: {old_status.value} -> {new_status.value}",
+                old_status=old_status,
+                new_status=new_status,
+            )
+        
         order.status = new_status
         order.updated_at = datetime.now(timezone.utc)
         
@@ -549,8 +615,9 @@ class PaymentService:
         user.membership_expiry = new_expiry
         user.updated_at = datetime.now(timezone.utc)
         
+        # 使用 LogMasker 脱敏用户 ID (Requirements: 2.4)
         logger.info(
-            f"User membership upgraded: user_id={user.id}, "
+            f"User membership upgraded: user_id={LogMasker.mask_user_id(user.id)}, "
             f"tier={new_tier.value}, expiry={new_expiry}"
         )
         
@@ -765,25 +832,33 @@ class PaymentService:
 
 
 # ============================================================================
-# Global Instance
+# Global Instance (using ServiceProvider for thread-safe singleton)
 # ============================================================================
 
-_default_service: Optional[PaymentService] = None
+from app.utils.service_provider import ServiceProvider
+
+_payment_service_provider: ServiceProvider[PaymentService] = ServiceProvider(PaymentService)
 
 
 def get_payment_service() -> PaymentService:
-    """Get the default payment service instance (singleton).
+    """Get the default payment service instance (thread-safe singleton).
+    
+    Uses ServiceProvider with double-checked locking pattern to ensure
+    thread safety when multiple threads call this function concurrently.
     
     Returns:
         PaymentService instance
+        
+    Requirements:
+        - 5.2: WHEN 多线程同时调用 get_payment_service() 时 THEN PopGraph SHALL 返回同一个 PaymentService 实例
     """
-    global _default_service
-    if _default_service is None:
-        _default_service = PaymentService()
-    return _default_service
+    return _payment_service_provider.get_instance()
 
 
 def reset_payment_service() -> None:
-    """Reset the payment service instance (for testing)."""
-    global _default_service
-    _default_service = None
+    """Reset the payment service instance (for testing).
+    
+    Requirements:
+        - 5.5: WHEN 测试需要重置单例时 THEN PopGraph SHALL 提供 reset() 方法清除实例
+    """
+    _payment_service_provider.reset()

@@ -1,9 +1,13 @@
 """Property-based tests for RateLimiter.
 
+**Feature: system-optimization, Property 7: 限流检查一致性**
 **Feature: popgraph, Property 9: 免费用户每日限额**
 
 This module tests that the RateLimiter correctly enforces daily limits
 for free-tier users, blocking requests after the limit is reached.
+
+Property 7 validates Requirements 1.4: WHEN 免费用户达到每日限额时 
+THEN PopGraph SHALL 返回 allowed=False 的 RateLimitResult
 """
 
 import sys
@@ -76,6 +80,56 @@ user_id_strategy = st.text(
     min_size=5,
     max_size=20,
 )
+
+
+# ============================================================================
+# Property 7: 限流检查一致性
+# **Feature: system-optimization, Property 7: 限流检查一致性**
+# **Validates: Requirements 1.4**
+#
+# For any free-tier user, when usage count reaches the daily limit,
+# check_limit SHALL return allowed=False.
+# ============================================================================
+
+
+@settings(max_examples=100)
+@given(
+    usage_count=st.integers(min_value=5, max_value=1000),
+)
+def test_property7_rate_limit_consistency(
+    usage_count: int,
+) -> None:
+    """
+    **Feature: system-optimization, Property 7: 限流检查一致性**
+    **Validates: Requirements 1.4**
+    
+    Property: For any free-tier user with usage count >= daily limit,
+    check_limit must return allowed=False consistently.
+    
+    This validates that the rate limiting logic is consistent and
+    correctly blocks users who have reached their daily quota.
+    """
+    # Arrange
+    tier = MembershipTier.FREE
+    free_limit = RATE_LIMIT_CONFIG[MembershipTier.FREE]["daily_limit"]
+    
+    # Precondition: usage must be at or above the limit
+    assert usage_count >= free_limit, "Test precondition: usage must be >= limit"
+    
+    # Act
+    result = check_limit_pure(usage_count, tier)
+    
+    # Assert: Request should be blocked
+    assert result.allowed is False, (
+        f"Free user with {usage_count} usages (limit={free_limit}) "
+        f"should be blocked. Got allowed={result.allowed}"
+    )
+    
+    # Assert: Remaining quota should be 0
+    assert result.remaining_quota == 0, (
+        f"Free user exceeding limit should have 0 remaining quota. "
+        f"Got {result.remaining_quota}"
+    )
 
 
 # ============================================================================

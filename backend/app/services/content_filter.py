@@ -2,8 +2,11 @@
 
 This module implements sensitive content filtering functionality.
 
-Requirements: 6.1 - WHEN a user submits input containing sensitive keywords 
-THEN the PopGraph System SHALL reject the request and display an appropriate warning message
+Requirements: 
+- 6.1: WHEN a user submits input containing sensitive keywords 
+       THEN the PopGraph System SHALL reject the request and display an appropriate warning message
+- 3.4: WHEN 用户提交内容过滤文本时 THEN PopGraph SHALL 验证长度不超过 10000 个字符
+- 3.5: WHEN 输入超过长度限制时 THEN PopGraph SHALL 返回明确的错误信息说明限制要求
 """
 
 import re
@@ -11,6 +14,7 @@ from pathlib import Path
 from typing import Optional
 
 from app.models.schemas import ContentFilterResult
+from app.utils.validators import InputValidator
 
 
 # 默认敏感词列表（可通过外部文件扩展）
@@ -88,13 +92,24 @@ class ContentFilterService:
         Returns:
             ContentFilterResult: 过滤结果，包含是否允许、被阻止的关键词和警告消息
             
-        Requirements: 6.1 - 敏感词过滤
+        Requirements: 
+            - 6.1: 敏感词过滤
+            - 3.4: WHEN 用户提交内容过滤文本时 THEN PopGraph SHALL 验证长度不超过 10000 个字符
+            - 3.5: WHEN 输入超过长度限制时 THEN PopGraph SHALL 返回明确的错误信息说明限制要求
         """
         if not text or not text.strip():
             return ContentFilterResult(
                 is_allowed=True,
                 blocked_keywords=[],
                 warning_message=None
+            )
+        
+        # 检查内容长度限制 (Requirements: 3.4, 3.5)
+        if not InputValidator.validate_content_length(text):
+            return ContentFilterResult(
+                is_allowed=False,
+                blocked_keywords=[],
+                warning_message=f"内容长度超过限制，最大允许 {InputValidator.LIMITS.MAX_CONTENT_LENGTH} 个字符"
             )
         
         if self._pattern is None:
