@@ -1,0 +1,18 @@
+[build]
+  base = "frontend"
+  publish = "dist"
+  command = "npm ci --include=dev && npm run build"
+
+# SPA fallback (React Router)
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# Proxy API calls to backend domain
+# Note: Requires backend to enable CORS for the Netlify site domain.
+[[redirects]]
+  from = "/api/*"
+  to = "https://api.popgraph.com/api/:splat"
+  status = 200
+  force = true

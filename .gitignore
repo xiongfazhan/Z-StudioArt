@@ -16,3 +16,5 @@ Thumbs.db
 
 # Project specific exclusions that might be in root
 *.log
+# Local Netlify folder
+.netlify
