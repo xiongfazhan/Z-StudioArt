@@ -37,6 +37,22 @@ class GenerationType(str, Enum):
     POSTER = "poster"
     SCENE_FUSION = "scene_fusion"
 
+    @classmethod
+    def _missing_(cls, value):
+        if value is None:
+            return None
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"poster", "poster".lower()}:
+                return cls.POSTER
+            if normalized in {"scene_fusion", "scene-fusion", "scene fusion", "scenefusion"}:
+                return cls.SCENE_FUSION
+            if normalized in {"poster".upper().lower(), "poster".upper().strip().lower()}:
+                return cls.POSTER
+            if normalized in {"scene_fusion".upper().strip().lower()}:
+                return cls.SCENE_FUSION
+        return None
+
 
 class PaymentMethod(str, Enum):
     """支付方式枚举"""

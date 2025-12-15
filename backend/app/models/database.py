@@ -142,7 +142,7 @@ class GenerationRecord(Base):
         index=True,
     )
     type: GenerationType = Column(
-        Enum(GenerationType),
+        Enum(GenerationType, values_callable=lambda x: [e.value for e in x]),
         nullable=False,
     )
     input_params: dict = Column(JSON, nullable=False)
