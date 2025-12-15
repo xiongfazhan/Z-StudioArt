@@ -1,6 +1,7 @@
 # IDE
 .vscode/
 .idea/
+test_auth_email.py
 
 # System
 .DS_Store

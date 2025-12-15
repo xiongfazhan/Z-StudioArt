@@ -6,8 +6,14 @@
 # Proxy API calls to backend domain
 # Note: Requires backend to enable CORS for the Netlify site domain.
 [[redirects]]
+  from = "/api/health"
+  to = "https://api.orbit-3.cloud/health"
+  status = 200
+  force = true
+
+[[redirects]]
   from = "/api/*"
-  to = "https://api.orbit-3.cloud/:splat"
+  to = "https://api.orbit-3.cloud/api/:splat"
   status = 200
   force = true
 
