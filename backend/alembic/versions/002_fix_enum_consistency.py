@@ -31,11 +31,17 @@ def upgrade() -> None:
     
     # Step 1: 创建新的枚举类型
     conn.execute(sa.text(
-        "CREATE TYPE membershiptier_new AS ENUM ('free', 'basic', 'professional')"
+        "DO $$ BEGIN "
+        "CREATE TYPE membershiptier_new AS ENUM ('free', 'basic', 'professional'); "
+        "EXCEPTION WHEN duplicate_object THEN null; "
+        "END $$;"
     ))
     
     # Step 2: 更新 users 表中的 membership_tier 列
     # 先将列改为 VARCHAR 以便转换
+    conn.execute(sa.text(
+        "ALTER TABLE users ALTER COLUMN membership_tier DROP DEFAULT"
+    ))
     conn.execute(sa.text(
         "ALTER TABLE users ALTER COLUMN membership_tier TYPE VARCHAR(20)"
     ))
