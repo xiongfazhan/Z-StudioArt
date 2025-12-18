@@ -66,8 +66,15 @@ export function LoginPage() {
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : '发送验证码失败，请稍后重试';
       if (typeof err === 'object' && err !== null && 'response' in err) {
-        const axiosError = err as { response?: { data?: { detail?: string } } };
-        setError(axiosError.response?.data?.detail || errorMessage);
+        const axiosError = err as { response?: { data?: { detail?: string | { message?: string; code?: string } } } };
+        const detail = axiosError.response?.data?.detail;
+        if (typeof detail === 'string') {
+          setError(detail);
+        } else if (detail && typeof detail === 'object' && 'message' in detail) {
+          setError(detail.message || errorMessage);
+        } else {
+          setError(errorMessage);
+        }
       } else {
         setError(errorMessage);
       }
@@ -91,8 +98,15 @@ export function LoginPage() {
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : '登录失败，请稍后重试';
       if (typeof err === 'object' && err !== null && 'response' in err) {
-        const axiosError = err as { response?: { data?: { detail?: string } } };
-        setError(axiosError.response?.data?.detail || errorMessage);
+        const axiosError = err as { response?: { data?: { detail?: string | { message?: string; code?: string } } } };
+        const detail = axiosError.response?.data?.detail;
+        if (typeof detail === 'string') {
+          setError(detail);
+        } else if (detail && typeof detail === 'object' && 'message' in detail) {
+          setError(detail.message || errorMessage);
+        } else {
+          setError(errorMessage);
+        }
       } else {
         setError(errorMessage);
       }
@@ -116,8 +130,15 @@ export function LoginPage() {
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : '登录失败，请稍后重试';
       if (typeof err === 'object' && err !== null && 'response' in err) {
-        const axiosError = err as { response?: { data?: { detail?: string } } };
-        setError(axiosError.response?.data?.detail || errorMessage);
+        const axiosError = err as { response?: { data?: { detail?: string | { message?: string; code?: string } } } };
+        const detail = axiosError.response?.data?.detail;
+        if (typeof detail === 'string') {
+          setError(detail);
+        } else if (detail && typeof detail === 'object' && 'message' in detail) {
+          setError(detail.message || errorMessage);
+        } else {
+          setError(errorMessage);
+        }
       } else {
         setError(errorMessage);
       }
