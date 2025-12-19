@@ -7,6 +7,15 @@ test_auth_email.py
 .DS_Store
 Thumbs.db
 
+# Environment Variables (frontend & backend)
+.env
+.env.local
+.env.development
+.env.production
+.env.*.local
+!.env.example
+!.env.*.example
+
 # Agent / Tools
 .gemini/
 .gemini-clipboard/

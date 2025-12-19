@@ -38,6 +38,10 @@ export function PosterGeneratorPage() {
   const [error, setError] = useState<string>();
   const [generatedImages, setGeneratedImages] = useState<GeneratedImage[]>([]);
 
+  // Modal state for viewing large image
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalImageIndex, setModalImageIndex] = useState(0);
+
   const canGenerate = sceneDescription.trim() && marketingText.trim();
   const t = TRANSLATIONS[language];
 
@@ -81,6 +85,61 @@ export function PosterGeneratorPage() {
   const handleClearResults = () => {
     setGeneratedImages([]);
     setError(undefined);
+  };
+
+  // View large image
+  const handleViewImage = () => {
+    if (generatedImages.length > 0) {
+      setModalImageIndex(0);
+      setIsModalOpen(true);
+    }
+  };
+
+  // Download first image
+  const handleDownloadImage = async () => {
+    if (generatedImages.length > 0) {
+      const image = generatedImages[0];
+      try {
+        const response = await fetch(image.url);
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `popgraph-poster-1.png`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      } catch (error) {
+        console.error('Download failed:', error);
+      }
+    }
+  };
+
+  // Close modal
+  const closeModal = () => {
+    setIsModalOpen(false);
+  };
+
+  // Download from modal
+  const handleModalDownload = async () => {
+    if (generatedImages.length > modalImageIndex) {
+      const image = generatedImages[modalImageIndex];
+      try {
+        const response = await fetch(image.url);
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `popgraph-poster-${modalImageIndex + 1}.png`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      } catch (error) {
+        console.error('Download failed:', error);
+      }
+    }
   };
 
   return (
@@ -185,19 +244,50 @@ export function PosterGeneratorPage() {
             {/* Right Main Area - Results */}
             <div className="create-main flex flex-col gap-6">
               {/* Results Area */}
-              <div className="compact-card flex-1 flex flex-col min-h-[420px]">
-                <div className="flex items-center justify-between mb-4">
+              <div className="compact-card flex-1 flex flex-col min-h-[420px] sm:min-h-[420px]">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
                   <div className="create-section-header mb-0 pb-0 border-b-0">
                     <h4>{t.gallery.title}</h4>
                   </div>
                   {generatedImages.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={handleClearResults}
-                      className="text-sm px-4 py-2 rounded-lg bg-[var(--primary-bg)] text-[var(--text-muted)] hover:text-[var(--primary)] transition-colors"
-                    >
-                      {t.gallery.clearAll}
-                    </button>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {/* View Button */}
+                      <button
+                        type="button"
+                        onClick={handleViewImage}
+                        className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg bg-[var(--primary)] text-white hover:bg-[var(--primary-dark)] transition-colors"
+                      >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        </svg>
+                        <span className="sr-only sm:not-sr-only">{language === 'zh' ? '查看' : 'View'}</span>
+                      </button>
+
+                      {/* Download Button */}
+                      <button
+                        type="button"
+                        onClick={handleDownloadImage}
+                        className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700 transition-colors"
+                      >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                        </svg>
+                        <span className="sr-only sm:not-sr-only">{language === 'zh' ? '下载' : 'Download'}</span>
+                      </button>
+
+                      {/* Spacer/Divider - hidden on mobile */}
+                      <div className="hidden sm:block w-px h-6 bg-[var(--border-light)] mx-1" />
+
+                      {/* Clear All Button */}
+                      <button
+                        type="button"
+                        onClick={handleClearResults}
+                        className="text-sm px-3 py-2 rounded-lg bg-[var(--primary-bg)] text-[var(--text-muted)] hover:text-red-500 hover:bg-red-50 transition-colors"
+                      >
+                        {t.gallery.clearAll}
+                      </button>
+                    </div>
                   )}
                 </div>
 
@@ -268,6 +358,88 @@ export function PosterGeneratorPage() {
 
       {/* Footer */}
       <Footer />
+
+      {/* Image View Modal */}
+      {isModalOpen && generatedImages.length > 0 && (
+        <div
+          className="fixed inset-0 z-[9999] bg-black/90 flex justify-center items-center"
+          onClick={closeModal}
+        >
+          <div
+            className="relative max-w-[90%] max-h-[90%] bg-transparent p-2"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Close Button */}
+            <button
+              type="button"
+              className="absolute -top-10 right-0 bg-transparent border-none text-3xl text-white cursor-pointer z-10 hover:text-gray-300"
+              onClick={closeModal}
+            >
+              &times;
+            </button>
+
+            {/* Large Image */}
+            <img
+              src={generatedImages[modalImageIndex].url}
+              alt={`Generated Poster ${modalImageIndex + 1}`}
+              className="block max-w-full max-h-[80vh] w-auto h-auto rounded-lg"
+            />
+
+            {/* Bottom Controls */}
+            <div className="mt-4 flex items-center justify-center gap-4">
+              {/* Previous Button */}
+              {generatedImages.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => setModalImageIndex((modalImageIndex - 1 + generatedImages.length) % generatedImages.length)}
+                  className="p-3 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                </button>
+              )}
+
+              {/* Download Button */}
+              <button
+                type="button"
+                onClick={handleModalDownload}
+                className="flex items-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-full shadow-lg transition-all font-medium"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                  />
+                </svg>
+                {language === 'zh' ? '下载图片' : 'Download'}
+              </button>
+
+              {/* Next Button */}
+              {generatedImages.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => setModalImageIndex((modalImageIndex + 1) % generatedImages.length)}
+                  className="p-3 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+              )}
+            </div>
+
+            {/* Image Counter */}
+            {generatedImages.length > 1 && (
+              <p className="mt-3 text-white/50 text-sm text-center">
+                {modalImageIndex + 1} / {generatedImages.length}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
