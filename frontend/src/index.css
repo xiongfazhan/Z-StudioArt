@@ -1038,3 +1038,301 @@ ul, ol {
 .template-scroll-container::-webkit-scrollbar-thumb:hover {
   background: var(--primary-dark);
 }
+
+/* ==========================================
+   Mobile Responsive Improvements
+   ========================================== */
+
+/* Mobile viewport meta is set in index.html */
+
+/* Prevent horizontal overflow on mobile */
+@media (max-width: 768px) {
+  html, body {
+    overflow-x: hidden;
+  }
+
+  /* Main content padding adjustment */
+  .main-content {
+    padding: 20px 0;
+  }
+
+  .container-main {
+    padding: 0 16px;
+  }
+
+  /* Card body smaller padding on mobile */
+  .card-body {
+    padding: 20px;
+  }
+
+  .compact-card {
+    padding: 16px;
+  }
+
+  /* Form inputs - larger touch targets */
+  .form-input {
+    padding: 16px 14px;
+    font-size: 16px; /* Prevents iOS zoom on focus */
+  }
+
+  /* Buttons - larger touch targets */
+  .btn-primary,
+  .btn-secondary {
+    padding: 14px 24px;
+    min-width: auto;
+  }
+
+  .btn-social {
+    width: 40px;
+    height: 40px;
+  }
+
+  /* Language switch compact on mobile */
+  .language-switch {
+    padding: 3px;
+  }
+
+  .lang-btn {
+    padding: 5px 10px;
+    font-size: 12px;
+  }
+
+  /* Create page grid - single column on mobile */
+  .create-page-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .create-sidebar {
+    gap: 16px;
+  }
+
+  /* Section headers */
+  .create-section-header {
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+  }
+
+  .create-section-header h4 {
+    font-size: 16px;
+  }
+
+  /* Generate button full width on mobile */
+  .generate-btn {
+    width: 100%;
+    padding: 16px 20px;
+  }
+
+  /* Gallery grid - smaller gap */
+  .gallery-grid {
+    gap: 12px;
+  }
+
+  /* Hero section */
+  .hero__section {
+    padding-top: 20px;
+    margin-bottom: 40px;
+  }
+
+  /* CTA section */
+  .cta-section {
+    padding: 40px 0 60px;
+  }
+
+  .cta-card {
+    padding: 30px 20px;
+    border-radius: 16px;
+  }
+
+  .cta-title {
+    font-size: 24px;
+    line-height: 1.3;
+  }
+
+  .cta-subtitle-line1 {
+    font-size: 16px;
+  }
+
+  .cta-subtitle-line2 {
+    font-size: 14px;
+    margin-bottom: 30px;
+  }
+
+  .cta-btn-primary,
+  .cta-btn-secondary {
+    padding: 14px 30px;
+    font-size: 16px;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  /* About page */
+  .about__page {
+    padding: 20px 0 60px;
+  }
+
+  .about__meta {
+    flex-wrap: wrap;
+  }
+
+  /* Section title */
+  .section-title {
+    margin-bottom: 24px;
+  }
+
+  /* Alerts */
+  .alert {
+    padding: 14px 16px;
+    margin-bottom: 16px;
+  }
+
+  /* Modal improvements for mobile */
+  .fixed.inset-0 {
+    padding: 16px;
+  }
+
+  /* Template scroll container */
+  .template-scroll-container {
+    max-height: 300px;
+  }
+}
+
+/* Small mobile devices (< 480px) */
+@media (max-width: 480px) {
+  .container-main {
+    padding: 0 12px;
+  }
+
+  h1 { font-size: 28px; }
+  h2 { font-size: 24px; }
+  h3 { font-size: 20px; }
+  h4 { font-size: 18px; }
+
+  .card-body {
+    padding: 16px;
+  }
+
+  .compact-card {
+    padding: 14px;
+  }
+
+  /* Hero slider */
+  .slide-item img {
+    height: 220px;
+  }
+
+  .hero-text-slider .text-item h2 {
+    font-size: 20px;
+  }
+
+  .hero-text-slider {
+    padding-top: 30px;
+  }
+
+  /* CTA section extra small */
+  .cta-title {
+    font-size: 22px;
+  }
+
+  /* Gallery result area min-height */
+  .create-main .compact-card {
+    min-height: 300px;
+  }
+
+  /* Feature comparison table scroll hint */
+  .overflow-x-auto {
+    position: relative;
+  }
+
+  .overflow-x-auto::after {
+    content: '';
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 30px;
+    background: linear-gradient(to right, transparent, rgba(255,255,255,0.9));
+    pointer-events: none;
+  }
+}
+
+/* Tablet adjustments (768px - 1024px) */
+@media (min-width: 768px) and (max-width: 1024px) {
+  .create-page-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* On tablet, show two-column for create page */
+  @media (min-width: 900px) {
+    .create-page-grid {
+      grid-template-columns: 400px 1fr;
+      gap: 24px;
+    }
+  }
+}
+
+/* Touch device improvements */
+@media (hover: none) and (pointer: coarse) {
+  /* Remove hover effects that don't work well on touch */
+  .gallery-item:hover {
+    transform: none;
+  }
+
+  .gallery-item::after {
+    opacity: 0.3;
+  }
+
+  /* Larger touch targets */
+  .btn-social {
+    width: 44px;
+    height: 44px;
+  }
+
+  /* Remove hover transform on buttons */
+  .btn-primary:hover,
+  .btn-secondary:hover {
+    transform: none;
+  }
+
+  .generate-btn:hover:not(:disabled) {
+    transform: none;
+  }
+
+  .cta-btn-primary:hover,
+  .cta-btn-secondary:hover {
+    transform: none;
+  }
+}
+
+/* Safe area insets for notched devices */
+@supports (padding: max(0px)) {
+  .page-wrapper {
+    padding-left: max(0px, env(safe-area-inset-left));
+    padding-right: max(0px, env(safe-area-inset-right));
+  }
+
+  .fixed.bottom-4 {
+    bottom: max(16px, env(safe-area-inset-bottom));
+  }
+}
+
+/* Prevent text selection on interactive elements (mobile UX) */
+.btn-primary,
+.btn-secondary,
+.btn-social,
+.lang-btn,
+.generate-btn,
+.nav-link {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Smooth scrolling on mobile */
+@media (max-width: 768px) {
+  .template-scroll-container,
+  .overflow-x-auto {
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+  }
+}
