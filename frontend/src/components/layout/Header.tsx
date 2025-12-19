@@ -55,7 +55,7 @@ export function Header() {
     <header className="header">
       <div className="container-fluid px-4 lg:px-12">
         <div className="relative flex items-center justify-between py-6">
-          {/* Social Links - Left */}
+          {/* Social Links - Left (desktop only) */}
           <div className="hidden sm:flex items-center gap-1 w-[200px]">
             <a href="#" className="btn-social">
               <i className="fa-brands fa-facebook-f"></i>
@@ -71,6 +71,28 @@ export function Header() {
             </a>
           </div>
 
+          {/* Language Switch - Left on mobile only */}
+          <div className="block sm:hidden">
+            <div className="language-switch">
+              <button
+                type="button"
+                onClick={() => setLanguage('zh')}
+                className={`lang-btn ${language === 'zh' ? 'active' : ''}`}
+                aria-pressed={language === 'zh'}
+              >
+                中文
+              </button>
+              <button
+                type="button"
+                onClick={() => setLanguage('en')}
+                className={`lang-btn ${language === 'en' ? 'active' : ''}`}
+                aria-pressed={language === 'en'}
+              >
+                EN
+              </button>
+            </div>
+          </div>
+
           {/* Logo - Center (absolute positioning for true center) */}
           <div className="absolute left-1/2 transform -translate-x-1/2">
             <Link to="/" className="inline-block">
@@ -80,8 +102,8 @@ export function Header() {
 
           {/* Right Actions - Language Switch & User */}
           <div className="flex items-center gap-3 ml-auto">
-            {/* Language Switch */}
-            <div className="language-switch">
+            {/* Language Switch - desktop only */}
+            <div className="language-switch hidden sm:flex">
               <button
                 type="button"
                 onClick={() => setLanguage('zh')}
